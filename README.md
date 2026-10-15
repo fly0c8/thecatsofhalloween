@@ -121,3 +121,6 @@ and so does falling into a pit. Every 10 candy corns gives you an extra life. Fi
 | `server/main.go` | Go websocket game server (gorilla/websocket), also serves the web build |
 | `server/web/` | the built WebAssembly game (generated) |
 | `web/shell.html` | the HTML page around the WebAssembly game |
+| `Makefile` | `make` desktop build, `make web` WebAssembly build, `make server` run locally, `make deploy` build web + deploy, `make clean` |
+| `server/deploy.sh` | builds the Linux server and deploys it with `server/web/` over SSH (`DEPLOY_HOST`, `DEPLOY_PORT`) |
+| `server/thecatsofhalloween.service` | systemd user service that runs the server on the deploy host |
