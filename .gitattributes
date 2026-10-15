@@ -1,0 +1,10 @@
+# Text files: normalised to LF in the repository, native line endings on checkout
+* text=auto
+# Visual Studio project files are happiest with CRLF on Windows
+*.slnx text eol=crlf
+*.vcxproj text eol=crlf
+*.vcxproj.filters text eol=crlf
+# Binaries
+*.wasm binary
+*.ico binary
+*.png binary

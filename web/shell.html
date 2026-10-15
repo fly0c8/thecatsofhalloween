@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Cats of Halloween</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+    body { font: 12px/1.4 "Topaz", "Courier New", monospace; color: #96c; }
+    /* the canvas always covers the whole page; the game sizes its backing store to match
+       (at device resolution) and letterboxes the 320x256 Amiga screen itself */
+    #canvas { position: fixed; left: 0; top: 0; display: block; outline: none; background: #000;
+              width: 100vw !important; height: 100vh !important; }
+    #hint { position: fixed; left: 50%; top: 10px; transform: translateX(-50%);
+            padding: 4px 10px; background: #fff; color: #05a; font-weight: bold; letter-spacing: 1px;
+            pointer-events: none; transition: opacity 1s; white-space: nowrap; }
+    #fs { position: fixed; right: 10px; top: 10px; width: 30px; height: 26px; border: 2px solid #96c;
+          background: #000; color: #96c; font: bold 16px monospace; cursor: pointer; opacity: .55; }
+    #fs:hover { opacity: 1; }
+    :fullscreen #fs { display: none; }
+    #status { position: fixed; top: 45%; width: 100%; text-align: center; pointer-events: none; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" tabindex="1" oncontextmenu="event.preventDefault()"></canvas>
+  <button id="fs" title="Fullscreen (F11 or double-click)">&#x26F6;</button>
+  <div id="hint">CLICK TO PLAY &middot; F11 / DOUBLE-CLICK = FULLSCREEN</div>
+  <div id="status">LOADING...</div>
+  <script>
+    var statusEl = document.getElementById('status');
+    var canvas = document.getElementById('canvas');
+    var hint = document.getElementById('hint');
+    var Module = {
+      canvas: canvas,
+      print: function (t) { console.log(t); },
+      printErr: function (t) { console.warn(t); },
+      setStatus: function (t) { statusEl.textContent = t ? t.toUpperCase() : ''; },
+      monitorRunDependencies: function (left) { if (!left) statusEl.textContent = ''; }
+    };
+
+    // Fullscreen must be requested from inside a key or click handler, so the page does it.
+    function toggleFullscreen() {
+      var el = document.documentElement;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+      } else {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      }
+      canvas.focus();
+    }
+    document.getElementById('fs').addEventListener('click', toggleFullscreen);
+    canvas.addEventListener('dblclick', toggleFullscreen);
+
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'F11' || (e.key === 'Enter' && e.altKey)) { e.preventDefault(); toggleFullscreen(); return; }
+      // keep the page from scrolling on game keys
+      if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].indexOf(e.key) >= 0) e.preventDefault();
+    }, true);
+
+    canvas.addEventListener('click', function () { canvas.focus(); });
+    window.addEventListener('load', function () { canvas.focus(); });
+    setTimeout(function () { hint.style.opacity = 0; }, 7000);
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

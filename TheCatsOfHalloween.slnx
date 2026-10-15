@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="TheCatsOfHalloween.vcxproj" Id="91228cc1-5afb-4ea6-ba4b-272a5e2af297" />
+  <Project Path="vendor/raylib/raylib.vcxproj" Id="f98bf5ab-afdf-4a8a-9d15-496d7ef7456f" />
+</Solution>

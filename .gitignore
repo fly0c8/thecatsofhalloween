@@ -1,0 +1,21 @@
+# Visual Studio
+.vs/
+x64/
+x86/
+Win32/
+Debug/
+Release/
+TheCatsO.*/
+*.user
+vendor/raylib/lib/
+vendor/raylib/obj/
+
+# CMake builds
+build/
+build-web/
+out/
+
+# Go server binaries
+server/server
+server/server.exe
+server/*.exe
