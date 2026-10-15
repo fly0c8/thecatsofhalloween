@@ -51,6 +51,17 @@ The build copies `TheCatsOfHalloween.html/.js/.wasm` into `server/web/` automati
 and desktop players can play against each other. Click the game once so it gets keyboard focus.
 Browsers only start audio after the first key press.
 
+## Deploying
+`server/deploy.sh` builds the server for Linux and runs it with the web build on a host over SSH, as the
+systemd user service `thecatsofhalloween` (no sudo needed). By default it deploys to
+http://runwayperformance.com:6060:
+```
+make deploy                     # rebuilds the WebAssembly version, then runs server/deploy.sh
+make deploy DEPLOY_HOST=user@example.com DEPLOY_PORT=9000
+```
+`server/deploy.sh` on its own uploads `server/web/` as it is, without rebuilding it.
+The Makefile also has `make` (desktop build), `make web`, `make server` (run locally) and `make clean`.
+
 ## Controls
 | | Move | Jump | Drop through platform | Scratch | Pause | Leave (while paused) |
 |---|---|---|---|---|---|---|
