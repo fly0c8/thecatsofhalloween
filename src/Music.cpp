@@ -398,6 +398,19 @@ void TriggerSfx(const SfxRequest& r)
     case Sfx::Fall:  StartSfx(&g_ins[I_FX_SINE], { {0, 88}, {0.7f, 52} }, 0.45f, p); break;
     case Sfx::Start: StartSfx(&g_ins[I_FX_SQUARE], { {0, 69}, {0.08f, 69}, {0.081f, 72}, {0.16f, 72}, {0.161f, 76}, {0.24f, 76}, {0.241f, 81}, {0.45f, 81} }, 0.3f, 0); break;
     case Sfx::Win:   StartSfx(&g_ins[I_FX_SQUARE], { {0, 72}, {0.15f, 72}, {0.151f, 76}, {0.3f, 76}, {0.301f, 79}, {0.45f, 79}, {0.451f, 84}, {0.9f, 84} }, 0.32f, 0, 0.15f); break;
+    case Sfx::Smash:
+        StartSfx(&g_ins[I_FX_NOISE], { {0, 92}, {0.22f, 60} }, 0.50f, p);
+        StartSfx(&g_ins[I_FX_SQUARE], { {0, 60}, {0.18f, 38} }, 0.32f, p);
+        break;
+    case Sfx::Angry: StartSfx(&g_ins[I_FX_SAW], { {0, 40}, {0.12f, 47}, {0.28f, 38}, {0.5f, 44} }, 0.40f, p, 0.8f); break;
+    case Sfx::Wand:  StartSfx(&g_ins[I_FX_SQUARE], { {0, 84}, {0.06f, 84}, {0.061f, 88}, {0.12f, 88}, {0.121f, 91}, {0.18f, 91}, {0.181f, 96}, {0.6f, 96} }, 0.26f, 0, 0.2f); break;
+    case Sfx::Boost: StartSfx(&g_ins[I_FX_PULSE], { {0, 60}, {0.18f, 86} }, 0.28f, p); break;
+    case Sfx::Boo:    StartSfx(&g_ins[I_FX_SINE], { {0, 74}, {0.15f, 79}, {0.7f, 62} }, 0.40f, p, 0.9f); break;
+    case Sfx::Cackle: StartSfx(&g_ins[I_FX_PULSE], { {0, 86}, {0.06f, 82}, {0.061f, 87}, {0.12f, 83}, {0.121f, 88}, {0.18f, 84}, {0.181f, 89}, {0.3f, 85} }, 0.26f, p, 0.5f); break;
+    case Sfx::Poof:
+        StartSfx(&g_ins[I_FX_NOISE], { {0, 84}, {0.3f, 100} }, 0.35f, p);
+        StartSfx(&g_ins[I_FX_SQUARE], { {0, 76}, {0.2f, 55} }, 0.25f, p);
+        break;
     }
 }
 

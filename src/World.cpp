@@ -20,6 +20,9 @@ void World::Generate(uint32_t seed)
     decor_.clear();
     candies_.clear();
     bats_.clear();
+    pumpkinHomes_.clear();
+    sittingPumpkins_.clear();
+    monsterSpawns_.clear();
 
     // --- 1. ground height map ------------------------------------------------
     int h = 19;
@@ -111,7 +114,9 @@ void World::Generate(uint32_t seed)
             tx += n;
             continue;
         }
-        decor_.push_back({ t, px + rng.Range(-3, 3), py });
+        const int dx = px + rng.Range(-3, 3);
+        if (t == D_PUMPKIN) sittingPumpkins_.push_back(Vector2{ (float)dx, (float)py });   // a real, smashable one
+        else decor_.push_back({ t, dx, py });
         tx += (t == D_TREE) ? 3 : 1;
     }
     // trees go behind everything else
@@ -138,6 +143,45 @@ void World::Generate(uint32_t seed)
         b.phase = rng.Float() * 6.28f;
         bats_.push_back(b);
     }
+
+    // --- 7. homes of the jumping pumpkins -------------------------------------------
+    // (generated last, so everything above stays exactly as it was)
+    // Most live in the pumpkin patch; none right at the start where the cats appear.
+    for (int tx = 24; tx < W - 4; ++tx) {
+        const int g = ground_[tx];
+        if (g >= H || ground_[tx - 1] != g || ground_[tx + 1] != g) continue;
+        if (!rng.Chance(ZoneOfColumn(tx) == Z_PUMPKINS ? 0.18f : 0.06f)) continue;
+        pumpkinHomes_.push_back(Vector2{ (float)(tx * TILE + 8), (float)(g * TILE) });
+        tx += 3;
+    }
+
+    // --- 8. monsters (also last, for the same reason) --------------------------------
+    // graveyard: skeletons, zombies, ghosts - pumpkin patch: witches, scarecrow zombies -
+    // forest: zombies, witches, ghosts - castle: ghosts, skeletons, witches
+    enum { GHOST, SKELETON, ZOMBIE, WITCH };
+    static const int byZone[Z_COUNT][4] = {
+        { SKELETON, ZOMBIE, GHOST, SKELETON },
+        { WITCH, ZOMBIE, WITCH, GHOST },
+        { ZOMBIE, WITCH, GHOST, ZOMBIE },
+        { GHOST, SKELETON, WITCH, GHOST },
+    };
+    for (int tx = 30; tx < W - 6; ++tx) {
+        const int g = ground_[tx];
+        if (g >= H || !rng.Chance(0.09f)) continue;
+        const int type = byZone[ZoneOfColumn(tx)][rng.Range(0, 3)];
+        const float x = (float)(tx * TILE + 8);
+        if (type == GHOST) {
+            monsterSpawns_.push_back({ type, Vector2{ x, (float)(g * TILE - rng.Range(24, 48)) } });
+        } else if (type == WITCH) {
+            int top = g;   // fly well above the highest ground nearby
+            for (int k = std::max(0, tx - 12); k <= std::min(W - 1, tx + 12); ++k) top = std::min(top, ground_[k]);
+            monsterSpawns_.push_back({ type, Vector2{ x, (float)std::max(28, top * TILE - rng.Range(70, 100)) } });
+        } else {
+            if (ground_[tx - 1] != g || ground_[tx + 1] != g) continue;
+            monsterSpawns_.push_back({ type, Vector2{ x, (float)(g * TILE) } });
+        }
+        tx += 10;
+    }
 }
 
 Tile World::At(int tx, int ty) const
@@ -159,7 +203,7 @@ Zone World::ZoneAt(float px) const { return ZoneOfColumn((int)(px / TILE)); }
 
 Vector2 World::SpawnPoint(int player) const
 {
-    const int tx = player == 0 ? 5 : W - 6;
+    const int tx = player == 0 ? 5 : 7;   // the two cats start side by side
     return Vector2{ (float)(tx * TILE + 8), (float)(ground_[tx] * TILE) };
 }
 

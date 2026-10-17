@@ -19,6 +19,7 @@ enum DecorType : uint8_t {
 struct Decor { DecorType type; int x, y; };          // x,y = bottom centre in pixels
 struct Candy { Vector2 pos; bool taken = false; float respawn = 0; };
 struct Bat   { float x, y, baseY, speed, phase; };
+struct MonsterSpawn { int type; Vector2 pos; };   // type: see MonsterType in Monsters.h
 
 class World {
 public:
@@ -48,6 +49,9 @@ public:
     void DrawBats(Vector2 cam, int viewW, int viewH, float time) const;
 
     std::vector<Candy>& Candies() { return candies_; }
+    const std::vector<Vector2>& PumpkinHomes() const { return pumpkinHomes_; }        // the jumping ones
+    const std::vector<Vector2>& SittingPumpkins() const { return sittingPumpkins_; }  // the lazy ones
+    const std::vector<MonsterSpawn>& MonsterSpawns() const { return monsterSpawns_; }
     const std::vector<int>& Ground() const { return ground_; }
 
 private:
@@ -56,6 +60,9 @@ private:
     std::vector<Decor> decor_;
     std::vector<Candy> candies_;
     std::vector<Bat> bats_;
+    std::vector<Vector2> pumpkinHomes_;   // where the jumping pumpkins live (bottom centre)
+    std::vector<Vector2> sittingPumpkins_; // pumpkins that just sit in the patch until they get angry
+    std::vector<MonsterSpawn> monsterSpawns_; // ghosts, skeletons, zombies and witches
     Texture2D tileset_{};
     Texture2D decorAtlas_{};
     Rectangle decorRects_[D_COUNT]{};

@@ -4,7 +4,7 @@
 // Sound effects are mixed through the same engine.
 #pragma once
 
-enum class Sfx { Jump, Meow, Hit, Stomp, Candy, KO, Fall, Start, Win };
+enum class Sfx { Jump, Meow, Hit, Stomp, Candy, KO, Fall, Start, Win, Smash, Angry, Wand, Boost, Boo, Cackle, Poof };
 
 namespace music {
 

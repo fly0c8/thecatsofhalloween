@@ -1,8 +1,13 @@
 // The Cats of Halloween - game server.
 //
-// Two cats share one world. Each client simulates its own cat and streams its
-// state; the server relays that state to the rival and is the referee for
-// everything both players care about: candy pickups, knockouts and the score.
+// Two cats team up in one world to smash every jumping pumpkin in it. Each client simulates
+// its own cat and streams its state; the server relays it to the partner and is
+// the referee for everything both players care about: candy pickups, smashed
+// pumpkins, knocked-out monsters, the magic wand, knockouts and the team score.
+//
+// The pumpkins and monsters themselves are simulated by one client, the "host" (the player who
+// has been on the server longest). The host streams their positions and moods,
+// and decides when pumpkins turn angry and where the magic wand appears.
 // It also serves the WebAssembly build of the game, so one binary is enough.
 //
 //	go run . -addr :8080 -web ../build-web
@@ -11,15 +16,23 @@
 //
 //	server -> client                      client -> server
 //	WELCOME <id> <seed>                   STATE <cat state...>
-//	FULL                                  HIT <victimId> <fromX>
+//	FULL                                  GOAL <pumpkins in the world>
 //	JOIN <id> / LEAVE <id>                CANDY <index>
+//	HOST <id>                             SMASH <index>
 //	STATE <id> <cat state...>             KO <reason...>
-//	HIT <attackerId> <victimId> <fromX>
-//	CANDY <index> <takerId>
-//	CANDYBACK <index> / CANDYRESET
-//	SCORE <wins0> <wins1>
+//	CANDY <index> <takerId>               WANDGET
+//	CANDYBACK <index> / CANDYRESET        BONK <monster index>
+//	SMASH <index> <takerId>               host only:
+//	PUMPKINRESET                            PUMPKINS <pumpkin state...>
+//	PUMPKINS <pumpkin state...>             MONSTERS <monster state...>
+//	MONSTERS <monster state...>             WAND <x> <y>
+//	BONK <index> <takerId>                  NOWAND
+//	MONSTERBACK <index> / MONSTERRESET
+//	WAND <x> <y> / NOWAND
+//	CALM <takerId>
+//	SCORE <smashed> <goal> <kos> <maxKos> <smashedBy0> <smashedBy1>
 //	KO <loserId> <reason...>
-//	MATCH <winnerId>
+//	OVER <won 0|1>
 package main
 
 import (
@@ -38,12 +51,13 @@ import (
 
 const (
 	maxPlayers   = 2
-	winsNeeded   = 3
+	maxKnockouts = 5 // team knockouts before the pumpkins win
 	candyRespawn = 30 * time.Second
+	monsterBack  = 20 * time.Second // a knocked-out ghost / skeleton / zombie / witch returns
 	writeTimeout = 5 * time.Second
 	pingInterval = 20 * time.Second
 	pongTimeout  = 60 * time.Second
-	maxMessage   = 1024
+	maxMessage   = 8192 // a PUMPKINS snapshot can be a few hundred bytes
 )
 
 var (
@@ -68,12 +82,23 @@ type client struct {
 type game struct {
 	mu         sync.Mutex
 	players    [maxPlayers]*client
-	wins       [maxPlayers]int
+	host       int // player id that simulates the pumpkins, -1 = nobody
 	taken      map[int]bool
-	generation int // bumped on reset so stale candy respawn timers are ignored
+	smashed    map[int]bool
+	bonked     map[int]bool // monsters that are knocked out right now
+	smashCount int
+	goal       int // pumpkins in the world: smash them all to win (the clients tell us)
+	smashedBy  [maxPlayers]int
+	knockouts  int
+	wandActive bool
+	wandX      int
+	wandY      int
+	generation int // bumped on reset so stale respawn timers are ignored
 }
 
-func newGame() *game { return &game{taken: map[int]bool{}} }
+func newGame() *game {
+	return &game{host: -1, taken: map[int]bool{}, smashed: map[int]bool{}, bonked: map[int]bool{}}
+}
 
 // queue a message for one client without blocking the game lock
 func (c *client) push(msg string) {
@@ -94,12 +119,33 @@ func (g *game) broadcastLocked(msg string) {
 
 func (g *game) otherLocked(id int) *client { return g.players[1-id] }
 
-func (g *game) scoreLocked() string { return fmt.Sprintf("SCORE %d %d", g.wins[0], g.wins[1]) }
+func (g *game) scoreLocked() string {
+	return fmt.Sprintf("SCORE %d %d %d %d %d %d", g.smashCount, g.goal, g.knockouts, maxKnockouts,
+		g.smashedBy[0], g.smashedBy[1])
+}
 
+// a fresh round: every pumpkin and candy back, score cleared
 func (g *game) resetLocked() {
-	g.wins = [maxPlayers]int{}
 	g.taken = map[int]bool{}
+	g.smashed = map[int]bool{}
+	g.bonked = map[int]bool{}
+	g.smashCount = 0
+	g.smashedBy = [maxPlayers]int{}
+	g.knockouts = 0
+	g.wandActive = false
 	g.generation++
+}
+
+// after the given delay, call fn - unless the round was reset in the meantime
+func (g *game) laterLocked(d time.Duration, fn func()) {
+	gen := g.generation
+	time.AfterFunc(d, func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if g.generation == gen {
+			fn()
+		}
+	})
 }
 
 func (g *game) join(conn *websocket.Conn) *client {
@@ -111,10 +157,23 @@ func (g *game) join(conn *websocket.Conn) *client {
 		}
 		c := &client{id: id, conn: conn, send: make(chan string, 256)}
 		g.players[id] = c
+		if g.host < 0 {
+			g.host = id
+		}
 		c.push(fmt.Sprintf("WELCOME %d %d", id, *seed))
+		c.push(fmt.Sprintf("HOST %d", g.host))
 		c.push(g.scoreLocked())
 		for idx := range g.taken {
 			c.push(fmt.Sprintf("CANDY %d -1", idx))
+		}
+		for idx := range g.smashed {
+			c.push(fmt.Sprintf("SMASH %d -1", idx))
+		}
+		for idx := range g.bonked {
+			c.push(fmt.Sprintf("BONK %d -1", idx))
+		}
+		if g.wandActive {
+			c.push(fmt.Sprintf("WAND %d %d", g.wandX, g.wandY))
 		}
 		if o := g.otherLocked(id); o != nil {
 			c.push(fmt.Sprintf("JOIN %d", o.id))
@@ -136,7 +195,11 @@ func (g *game) leave(c *client) {
 	close(c.send)
 	g.broadcastLocked(fmt.Sprintf("LEAVE %d", c.id))
 	if g.players[0] == nil && g.players[1] == nil {
-		g.resetLocked() // empty server: fresh match for the next visitors
+		g.host = -1
+		g.resetLocked() // empty server: fresh game for the next visitors
+	} else if g.host == c.id {
+		g.host = 1 - c.id // the partner takes over the pumpkins where they are
+		g.broadcastLocked(fmt.Sprintf("HOST %d", g.host))
 	}
 	log.Printf("player %d left", c.id)
 }
@@ -145,6 +208,7 @@ func (g *game) handle(c *client, msg string) {
 	cmd, rest, _ := strings.Cut(msg, " ")
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	isHost := c.id == g.host
 
 	switch cmd {
 	case "STATE":
@@ -152,59 +216,123 @@ func (g *game) handle(c *client, msg string) {
 			o.push(fmt.Sprintf("STATE %d %s", c.id, rest))
 		}
 
-	case "HIT":
-		// HIT <victimId> <fromX>: the victim's client decides if it really hurts (invulnerability etc.)
-		f := strings.Fields(rest)
-		if len(f) != 2 {
+	case "PUMPKINS", "MONSTERS":
+		// the host's pumpkin / monster snapshot, relayed as-is to the partner
+		if !isHost {
 			return
 		}
-		victim, err := strconv.Atoi(f[0])
-		if err != nil || victim == c.id || victim < 0 || victim >= maxPlayers || g.players[victim] == nil {
-			return
+		if o := g.otherLocked(c.id); o != nil {
+			o.push(cmd + " " + rest)
 		}
-		if _, err := strconv.ParseFloat(f[1], 64); err != nil {
-			return
+
+	case "BONK":
+		idx, err := strconv.Atoi(strings.TrimSpace(rest))
+		if err != nil || idx < 0 || idx > 100000 || g.bonked[idx] {
+			return // already knocked out
 		}
-		g.players[victim].push(fmt.Sprintf("HIT %d %d %s", c.id, victim, f[1]))
+		g.bonked[idx] = true
+		g.broadcastLocked(fmt.Sprintf("BONK %d %d", idx, c.id))
+		g.laterLocked(monsterBack, func() {
+			if g.bonked[idx] {
+				delete(g.bonked, idx)
+				g.broadcastLocked(fmt.Sprintf("MONSTERBACK %d", idx))
+			}
+		})
 
 	case "CANDY":
 		idx, err := strconv.Atoi(strings.TrimSpace(rest))
 		if err != nil || idx < 0 || idx > 100000 || g.taken[idx] {
-			return // already eaten by the rival - first come, first served
+			return // already eaten by the partner - first come, first served
 		}
 		g.taken[idx] = true
 		g.broadcastLocked(fmt.Sprintf("CANDY %d %d", idx, c.id))
-		gen := g.generation
-		time.AfterFunc(candyRespawn, func() {
-			g.mu.Lock()
-			defer g.mu.Unlock()
-			if g.generation == gen && g.taken[idx] {
+		g.laterLocked(candyRespawn, func() {
+			if g.taken[idx] {
 				delete(g.taken, idx)
 				g.broadcastLocked(fmt.Sprintf("CANDYBACK %d", idx))
 			}
 		})
 
+	case "SMASH":
+		idx, err := strconv.Atoi(strings.TrimSpace(rest))
+		if err != nil || idx < 0 || idx > 100000 || g.smashed[idx] {
+			return // the other cat got there first
+		}
+		g.smashed[idx] = true
+		g.smashCount++
+		g.smashedBy[c.id]++
+		g.broadcastLocked(fmt.Sprintf("SMASH %d %d", idx, c.id))
+		g.broadcastLocked(g.scoreLocked())
+		if g.goal > 0 && g.smashCount >= g.goal {
+			g.overLocked(true) // not a single pumpkin left
+		}
+
+	case "GOAL":
+		// every client counts the pumpkins of the (seeded, identical) world after joining
+		n, err := strconv.Atoi(strings.TrimSpace(rest))
+		if err != nil || n <= 0 || n > 100000 || n == g.goal {
+			return
+		}
+		g.goal = n
+		g.broadcastLocked(g.scoreLocked())
+
+	case "WAND":
+		// the host saw pumpkins turn angry and hid a magic wand somewhere
+		f := strings.Fields(rest)
+		if !isHost || g.wandActive || len(f) != 2 {
+			return
+		}
+		x, err1 := strconv.Atoi(f[0])
+		y, err2 := strconv.Atoi(f[1])
+		if err1 != nil || err2 != nil {
+			return
+		}
+		g.wandActive, g.wandX, g.wandY = true, x, y
+		g.broadcastLocked(fmt.Sprintf("WAND %d %d", x, y))
+
+	case "NOWAND":
+		// no angry pumpkins left (all respawned calm), the wand fades away
+		if isHost && g.wandActive {
+			g.wandActive = false
+			g.broadcastLocked("NOWAND")
+		}
+
+	case "WANDGET":
+		if !g.wandActive {
+			return // the partner grabbed it first
+		}
+		g.wandActive = false
+		g.broadcastLocked(fmt.Sprintf("CALM %d", c.id))
+
 	case "KO":
-		// the knocked-out cat reports it; the rival (if any) gets the point
+		// a knocked-out cat reports it; it costs the whole team
 		reason := strings.TrimSpace(rest)
 		if reason == "" {
 			reason = "WAS KNOCKED OUT"
 		}
+		g.knockouts++
 		g.broadcastLocked(fmt.Sprintf("KO %d %s", c.id, reason))
-		winner := 1 - c.id
-		if g.players[winner] == nil {
-			return
-		}
-		g.wins[winner]++
 		g.broadcastLocked(g.scoreLocked())
-		if g.wins[winner] >= winsNeeded {
-			g.broadcastLocked(fmt.Sprintf("MATCH %d", winner))
-			g.resetLocked()
-			g.broadcastLocked(g.scoreLocked())
-			g.broadcastLocked("CANDYRESET")
-			log.Printf("match won by player %d", winner)
+		if g.knockouts >= maxKnockouts {
+			g.overLocked(false)
 		}
 	}
+}
+
+// the round is over: tell everybody, then set up a fresh one
+func (g *game) overLocked(won bool) {
+	w := 0
+	if won {
+		w = 1
+	}
+	g.broadcastLocked(fmt.Sprintf("OVER %d", w))
+	g.resetLocked()
+	g.broadcastLocked(g.scoreLocked())
+	g.broadcastLocked("CANDYRESET")
+	g.broadcastLocked("PUMPKINRESET")
+	g.broadcastLocked("MONSTERRESET")
+	g.broadcastLocked("NOWAND")
+	log.Printf("round over, team won: %v", won)
 }
 
 func firstWord(s string) string {
