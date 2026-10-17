@@ -1,0 +1,12 @@
+[Unit]
+Description=The Cats of Halloween game server
+After=network.target
+
+[Service]
+WorkingDirectory=%h/thecatsofhalloween
+ExecStart=%h/thecatsofhalloween/thecatsofhalloween -addr :${CATS_PORT} -web %h/thecatsofhalloween/web
+EnvironmentFile=%h/thecatsofhalloween/env
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

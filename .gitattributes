@@ -8,3 +8,5 @@
 *.wasm binary
 *.ico binary
 *.png binary
+# Shell scripts must keep LF so they run after a Windows checkout
+*.sh text eol=lf

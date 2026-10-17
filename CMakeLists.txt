@@ -56,6 +56,8 @@ if(EMSCRIPTEN)
     set_target_properties(TheCatsOfHalloween PROPERTIES SUFFIX ".html")
     target_link_options(TheCatsOfHalloween PRIVATE
         -sUSE_GLFW=3 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -lwebsocket.js
+        # skip HTML minification: it needs html-minifier-terser, which some Emscripten installs lack
+        -sMINIFY_HTML=0
         --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html)
     # drop the finished web build where the Go server serves it by default (server/web)
     set(WEB_OUT ${CMAKE_CURRENT_SOURCE_DIR}/server/web)

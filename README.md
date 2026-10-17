@@ -53,6 +53,17 @@ The build copies `TheCatsOfHalloween.html/.js/.wasm` into `server/web/` automati
 and desktop players can play against each other. Click the game once so it gets keyboard focus.
 Browsers only start audio after the first key press.
 
+## Deploying
+`server/deploy.sh` builds the server for Linux and runs it with the web build on a host over SSH, as the
+systemd user service `thecatsofhalloween` (no sudo needed). By default it deploys to
+http://runwayperformance.com:6060:
+```
+make deploy                     # rebuilds the WebAssembly version, then runs server/deploy.sh
+make deploy DEPLOY_HOST=user@example.com DEPLOY_PORT=9000
+```
+`server/deploy.sh` on its own uploads `server/web/` as it is, without rebuilding it.
+The Makefile also has `make` (desktop build), `make web`, `make server` (run locally) and `make clean`.
+
 ## Controls
 | | Move | Jump | Drop through platform | Scratch / smash | Pause | Leave (while paused) |
 |---|---|---|---|---|---|---|
@@ -139,3 +150,6 @@ is blown up by a whole number and then fitted to any screen size, so pixels stay
 | `server/main.go` | Go websocket game server (gorilla/websocket), also serves the web build |
 | `server/web/` | the built WebAssembly game (generated) |
 | `web/shell.html` | the HTML page around the WebAssembly game |
+| `Makefile` | `make` desktop build, `make web` WebAssembly build, `make server` run locally, `make deploy` build web + deploy, `make clean` |
+| `server/deploy.sh` | builds the Linux server and deploys it with `server/web/` over SSH (`DEPLOY_HOST`, `DEPLOY_PORT`) |
+| `server/thecatsofhalloween.service` | systemd user service that runs the server on the deploy host |
